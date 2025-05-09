@@ -1,6 +1,7 @@
+coverage
 nbclassic
 numpy
 pytest
 pytest-mock
 pytest-cov
-coverage
+xmltodict
