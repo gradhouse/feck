@@ -5,7 +5,9 @@
 # Licensed under the MIT License. See the LICENSE file for more details.
 
 import copy
-
+import os
+import pytest
+import tempfile
 
 from feck.arxiv.manifest import Manifest
 
@@ -30,21 +32,69 @@ valid_xml_dict = {
     }
 }
 
-# Test cases
-def test_is_arxiv_xml_valid_with_valid_data():
+def test_manifest_constructor():
+    """
+    Test the constructor of the Manifest class.
+    Ensure that the manifest is initialized with default values.
+    """
+    manifest = Manifest()
+    assert manifest._manifest == {
+        'metadata': {},
+        'contents': []
+    }
+
+def test_manifest_clear():
+    """
+    Test the clear method of the Manifest class.
+    Ensure that the manifest is cleared and reset to default values.
+    """
+    manifest = Manifest()
+    # Modify the manifest to simulate existing data
+    manifest._manifest['metadata'] = {'key': 'value'}
+    manifest._manifest['contents'] = [{'filename': 'test.txt'}]
+
+    # Call the clear method
+    manifest.clear()
+
+    # Assert that the manifest is reset to default values
+    assert manifest._manifest == {
+        'metadata': {},
+        'contents': []
+    }
+
+def test_manifest_set_defaults():
+    """
+    Test the _set_defaults method of the Manifest class.
+    Ensure that the manifest is set to default values.
+    """
+    manifest = Manifest()
+    # Modify the manifest to simulate existing data
+    manifest._manifest['metadata'] = {'key': 'value'}
+    manifest._manifest['contents'] = [{'filename': 'test.txt'}]
+
+    # Call the _set_defaults method
+    manifest._set_defaults()
+
+    # Assert that the manifest is reset to default values
+    assert manifest._manifest == {
+        'metadata': {},
+        'contents': []
+    }
+
+def test_is_arxiv_keys_present_with_valid_data():
     """
     Test that the method returns True for a valid xml_dict.
     """
-    assert Manifest._is_arxiv_xml_valid(valid_xml_dict) is True
+    assert Manifest._is_arxiv_keys_present(valid_xml_dict) is True
 
-def test_is_arxiv_xml_valid_with_missing_top_level_key():
+def test_is_arxiv_keys_present_with_missing_top_level_key():
     """
     Test that the method returns False when the top-level key is missing.
     """
     invalid_dict = {}
-    assert Manifest._is_arxiv_xml_valid(invalid_dict) is False
+    assert Manifest._is_arxiv_keys_present(invalid_dict) is False
 
-def test_is_arxiv_xml_valid_with_missing_arxivsrc_keys():
+def test_is_arxiv_keys_present_with_missing_arxivsrc_keys():
     """
     Test that the method returns False when 'arXivSRC' keys are missing.
     """
@@ -52,25 +102,25 @@ def test_is_arxiv_xml_valid_with_missing_arxivsrc_keys():
     invalid_dict = copy.deepcopy(valid_xml_dict)
     del invalid_dict['arXivSRC']['file']
 
-    assert Manifest._is_arxiv_xml_valid(invalid_dict) is False
+    assert Manifest._is_arxiv_keys_present(invalid_dict) is False
 
     invalid_dict = copy.deepcopy(valid_xml_dict)
     del invalid_dict['arXivSRC']['timestamp']
 
-    assert Manifest._is_arxiv_xml_valid(invalid_dict) is False
+    assert Manifest._is_arxiv_keys_present(invalid_dict) is False
 
 
-def test_is_arxiv_xml_valid_with_non_string_value_in_timestamp():
+def test_is_arxiv_keys_valid_with_non_string_value_in_timestamp():
     """
     Test that the method returns False when a value in 'file' is not a string.
     """
     invalid_dict = copy.deepcopy(valid_xml_dict)
     invalid_dict['arXivSRC']['timestamp'] = 1234  # should be a string
 
-    assert Manifest._is_arxiv_xml_valid(invalid_dict) is False
+    assert Manifest._is_arxiv_keys_present(invalid_dict) is False
 
 
-def test_is_arxiv_xml_valid_with_invalid_file_structure():
+def test_is_arxiv_keys_present_with_invalid_file_structure():
     """
     Test that the method returns False when 'file' entries have missing keys.
     """
@@ -86,9 +136,9 @@ def test_is_arxiv_xml_valid_with_invalid_file_structure():
             'timestamp': '2010-12-23 00:00:00'
         }
     }
-    assert Manifest._is_arxiv_xml_valid(invalid_dict) is False
+    assert Manifest._is_arxiv_keys_present(invalid_dict) is False
 
-def test_is_arxiv_xml_valid_with_invalid_types():
+def test_is_arxiv_keys_present_with_invalid_types():
     """
     Test that the method returns False when data types are incorrect.
     """
@@ -111,5 +161,326 @@ def test_is_arxiv_xml_valid_with_invalid_types():
             'timestamp': '2010-12-23 00:00:00'
         }
     }
-    assert Manifest._is_arxiv_xml_valid(invalid_dict) is False
+    assert Manifest._is_arxiv_keys_present(invalid_dict) is False
 
+def test_convert_arxiv_timestamp_to_iso():
+    """
+    Test _convert_arxiv_timestamp_to_iso method for converting EST timestamp to ISO 8601 GMT.
+    """
+    # Input timestamp in EST
+    input_timestamp = 'Mon Apr  7 04:58:03 2025'
+    # Expected output in GMT
+    expected_output = '2025-04-07T08:58:03+00:00'
+
+    # Call the method
+    result = Manifest._convert_arxiv_timestamp_to_iso(input_timestamp)
+
+    # Assert the result matches the expected output
+    assert result == expected_output
+
+
+def test_convert_arxiv_file_entry_timestamp_to_iso():
+    """
+    Test _convert_arxiv_file_timestamp_to_iso method for converting EST file timestamp to ISO 8601 GMT.
+    """
+    # Input timestamp in EST
+    input_timestamp = '2010-12-23 00:13:59'
+    # Expected output in GMT
+    expected_output = '2010-12-23T05:13:59+00:00'
+
+    # Call the method
+    result = Manifest._convert_arxiv_file_entry_timestamp_to_iso(input_timestamp)
+
+    # Assert the result matches the expected output
+    assert result == expected_output
+
+
+def test_convert_arxiv_timestamp_to_iso_invalid_format():
+    """
+    Test _convert_arxiv_timestamp_to_iso method with an invalid timestamp format.
+    """
+    # Invalid input timestamp
+    input_timestamp = 'Invalid Timestamp'
+
+    # Assert that a ValueError is raised
+    with pytest.raises(ValueError):
+        Manifest._convert_arxiv_timestamp_to_iso(input_timestamp)
+
+
+def test_convert_arxiv_file_entry_timestamp_to_iso_invalid_format():
+    """
+    Test _convert_arxiv_file_timestamp_to_iso method with an invalid timestamp format.
+    """
+    # Invalid input timestamp
+    input_timestamp = 'Invalid Timestamp'
+
+    # Assert that a ValueError is raised
+    with pytest.raises(ValueError):
+        Manifest._convert_arxiv_file_entry_timestamp_to_iso(input_timestamp)
+
+
+def test_is_file_entry_consistent_valid_entry():
+    """
+    Test _is_file_entry_consistent with a valid file entry.
+    """
+    valid_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/arXiv_src_1508_002.tar',
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1508'
+    }
+    assert Manifest._is_file_entry_consistent(valid_entry) is True
+
+
+def test_is_file_entry_consistent_invalid_filename():
+    """
+    Test _is_file_entry_consistent with an invalid filename.
+    """
+    invalid_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/invalid_filename.tar',
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1508'
+    }
+    assert Manifest._is_file_entry_consistent(invalid_entry) is False
+
+def test_is_file_entry_consistent_invalid_month():
+    """
+    Test _is_file_entry_consistent with an invalid month in 'yymm'.
+    """
+    invalid_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/arXiv_src_1508_002.tar',
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1513'  # Invalid month
+    }
+    assert Manifest._is_file_entry_consistent(invalid_entry) is False
+
+def test_is_file_entry_consistent_invalid_seq_num():
+    """
+    Test _is_file_entry_consistent with an invalid sequence number in the filename.
+    """
+    invalid_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/arXiv_src_1508_003.tar',  # seq_num mismatch
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1508'
+    }
+    assert Manifest._is_file_entry_consistent(invalid_entry) is False
+
+def test_process_file_entry_valid():
+    """
+    Test _process_file_entry with a valid file entry.
+    """
+    valid_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/arXiv_src_1508_002.tar',
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1508'
+    }
+
+    processed_entry = Manifest._process_file_entry(valid_entry)
+
+    assert processed_entry == {
+        'filename': 'src/arXiv_src_1508_002.tar',
+        'size_bytes': 537749445,
+        'timestamp_iso': '2017-08-05T10:13:16+00:00',
+        'year': 2015,
+        'month': 8,
+        'sequence_number': 2,
+        'n_submissions': 438,
+        'hash': {
+            'MD5': '271195f030a45b84d397dc8c540bde7f',
+            'MD5_contents': '5f4774a944c17e67f334ebb9bf912dbf',
+        }
+    }
+
+def test_process_file_entry_inconsistent():
+    """
+    Test _process_file_entry with an inconsistent file entry.
+    """
+    inconsistent_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/arXiv_src_1508_003.tar',  # seq_num mismatch
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1508'
+    }
+
+    with pytest.raises(ValueError, match="Entry inconsistent"):
+        Manifest._process_file_entry(inconsistent_entry)
+
+def test_process_file_entry_invalid_yymm():
+    """
+    Test _process_file_entry with an invalid 'yymm' value.
+    """
+    invalid_entry = {
+        'content_md5sum': '5f4774a944c17e67f334ebb9bf912dbf',
+        'filename': 'src/arXiv_src_1513_002.tar',  # Invalid month
+        'first_item': '1508.00577',
+        'last_item': '1508.01014',
+        'md5sum': '271195f030a45b84d397dc8c540bde7f',
+        'num_items': '438',
+        'seq_num': '2',
+        'size': '537749445',
+        'timestamp': '2017-08-05 06:13:16',
+        'yymm': '1513'
+    }
+
+    with pytest.raises(ValueError, match="Entry inconsistent"):
+        Manifest._process_file_entry(invalid_entry)
+
+@pytest.fixture
+def valid_xml_file():
+    """
+    Create a temporary XML file with valid arXiv data for testing.
+    """
+    xml_content = """<arXivSRC>
+        <timestamp>Mon Apr  7 04:58:03 2025</timestamp>
+        <file>
+            <content_md5sum>cacbfede21d5dfef26f367ec99384546</content_md5sum>
+            <filename>src/arXiv_src_0001_001.tar</filename>
+            <first_item>astro-ph0001001</first_item>
+            <last_item>quant-ph0001119</last_item>
+            <md5sum>949ae880fbaf4649a485a8d9e07f370b</md5sum>
+            <num_items>2364</num_items>
+            <seq_num>1</seq_num>
+            <size>225605507</size>
+            <timestamp>2010-12-23 00:13:59</timestamp>
+            <yymm>0001</yymm>
+        </file>
+        <file>
+            <content_md5sum>d90df481661ccdd7e8be883796539743</content_md5sum>
+            <filename>src/arXiv_src_0002_001.tar</filename>
+            <first_item>astro-ph0002001</first_item>
+            <last_item>quant-ph0002094</last_item>
+            <md5sum>4592ab506cf775afecf4ad560d982a00</md5sum>
+            <num_items>2365</num_items>
+            <seq_num>1</seq_num>
+            <size>227036528</size>
+            <timestamp>2010-12-23 00:18:09</timestamp>
+            <yymm>0002</yymm>
+        </file>
+    </arXivSRC>"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as temp_file:
+        temp_file.write(xml_content.encode('utf-8'))
+        temp_file_path = temp_file.name
+    yield temp_file_path
+    os.remove(temp_file_path)
+
+def test_import_arxiv_xml_valid(valid_xml_file):
+    """
+    Test import_arxiv_xml with a valid XML file.
+    """
+    manifest = Manifest()
+    manifest.import_arxiv_xml(valid_xml_file)
+
+    assert manifest._manifest['metadata'] == {
+        'manifest_filename': os.path.basename(valid_xml_file),
+        'timestamp_iso': '2025-04-07T08:58:03+00:00'
+    }
+    assert len(manifest._manifest['contents']) == 2
+    assert manifest._manifest['contents'][0]['filename'] == 'src/arXiv_src_0001_001.tar'
+    assert manifest._manifest['contents'][1]['filename'] == 'src/arXiv_src_0002_001.tar'
+
+def test_import_arxiv_xml_file_not_found():
+    """
+    Test import_arxiv_xml when the file does not exist.
+    """
+    manifest = Manifest()
+
+    with pytest.raises(FileNotFoundError, match='arXiv XML file not found'):
+        manifest.import_arxiv_xml('non_existent_file.xml')
+
+def test_import_arxiv_xml_invalid_structure():
+    """
+    Test import_arxiv_xml with an invalid XML structure.
+    """
+    invalid_xml_content = """<invalid></invalid>"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as temp_file:
+        temp_file.write(invalid_xml_content.encode('utf-8'))
+        temp_file_path = temp_file.name
+
+    manifest = Manifest()
+
+    with pytest.raises(TypeError, match='Entries missing in arXiv XML file'):
+        manifest.import_arxiv_xml(temp_file_path)
+
+    os.remove(temp_file_path)
+
+def test_import_arxiv_xml_inconsistent_entry():
+    """
+    Test import_arxiv_xml with an inconsistent file entry.
+    """
+    inconsistent_xml_content = """<arXivSRC>
+        <timestamp>Mon Apr  7 04:58:03 2025</timestamp>
+        <file>
+            <content_md5sum>d90df481661ccdd7e8be883796539743</content_md5sum>
+            <filename>src/arXiv_src_0002_001.tar</filename>
+            <first_item>astro-ph0002001</first_item>
+            <last_item>quant-ph0002094</last_item>
+            <md5sum>4592ab506cf775afecf4ad560d982a00</md5sum>
+            <num_items>2365</num_items>
+            <seq_num>1</seq_num>
+            <size>227036528</size>
+            <timestamp>2010-12-23 00:18:09</timestamp>
+            <yymm>0002</yymm>
+        </file>
+        <file>
+            <content_md5sum>cacbfede21d5dfef26f367ec99384546</content_md5sum>
+            <filename>invalid_filename.tar</filename>
+            <first_item>astro-ph0001001</first_item>
+            <last_item>quant-ph0001119</last_item>
+            <md5sum>949ae880fbaf4649a485a8d9e07f370b</md5sum>
+            <num_items>2364</num_items>
+            <seq_num>1</seq_num>
+            <size>225605507</size>
+            <timestamp>2010-12-23 00:13:59</timestamp>
+            <yymm>0001</yymm>
+        </file>        
+    </arXivSRC>"""
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xml") as temp_file:
+        temp_file.write(inconsistent_xml_content.encode('utf-8'))
+        temp_file_path = temp_file.name
+
+    manifest = Manifest()
+
+    with pytest.raises(ValueError, match='Entry inconsistent'):
+        manifest.import_arxiv_xml(temp_file_path)
+
+    os.remove(temp_file_path)
