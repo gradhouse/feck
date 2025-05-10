@@ -81,3 +81,30 @@ class XmlHandler:
             is_xml_format = False
 
         return is_xml_format
+
+    @staticmethod
+    def read_xml_to_dict(file_path: str) -> dict:
+        """
+        Read the file content in Extensible Markup Language (XML) format and return the content as a dictionary.
+        :param file_path: str, path to the file
+        :return: dict, content of the file as a python dictionary
+
+        :raises FileNotFoundError: If the file is not found.
+        :raises TypeError: If the file is not XML format.
+        :raises ValueError: If the XML content cannot be parsed.
+        """
+
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError('file not found')
+
+        if not XmlHandler.is_xml_format(file_path):
+            raise TypeError('file not in XML format')
+
+        try:
+            with open(file_path, 'r') as file_handle:
+                xml_content = file_handle.read()
+                xml_dict = xmltodict_implementation.parse(xml_content)
+        except Exception as e:
+            raise ValueError(f"Failed to parse XML content: {e}")
+
+        return xml_dict
