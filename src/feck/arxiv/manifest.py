@@ -5,6 +5,8 @@
 # Licensed under the MIT License. See the LICENSE file for more details.
 
 from datetime import datetime
+import matplotlib.pyplot as plt
+import numpy as np
 import os
 from zoneinfo import ZoneInfo
 
@@ -154,13 +156,10 @@ class Manifest:
 
         if set(xml_dict.keys()) == expected_top_level_keys:
             if set(xml_dict['arXivSRC'].keys()) == expected_src_keys:
-                print('QQ: MID')
                 if (isinstance(xml_dict['arXivSRC']['timestamp'], str)
                         and isinstance(xml_dict['arXivSRC']['file'], list)):
-                    print('QQ: BOT')
                     is_valid = all([set(entry.keys()) == expected_file_keys for entry in xml_dict['arXivSRC']['file']])
                     if is_valid:
-                        print('QQ: STR')
                         is_valid = all([isinstance(value, str) for entry in xml_dict['arXivSRC']['file']
                                         for _, value in entry.items()])
 
@@ -235,3 +234,67 @@ class Manifest:
             is_consistent = False
 
         return is_consistent
+
+    def get_statistics(self) -> dict:
+        """
+        Get summary statistics of the manifest.
+
+        :return: dict, summary statistics of the manifest.
+            The dictionary key is a (year, month) tuple.
+            The dictionary value is also a dictionary with the keys 'size_bytes' and 'n_submissions'.
+        """
+
+        statistics = dict()
+        for entry in self._manifest['contents']:
+            key = (entry['year'], entry['month'])
+            if key not in statistics:
+                statistics[key] = {'size_bytes': 0, 'n_submissions': 0}
+            statistics[key]['size_bytes'] += entry['size_bytes']
+            statistics[key]['n_submissions'] += entry['n_submissions']
+
+        return statistics
+
+    def plot_summary_statistics(self) -> None:
+        """
+        Plot summary statistics of the manifest.
+
+        The generated plots are:
+            - the number of submissions per month
+            - size of all submissions per month in GB
+            - average submission size in MB
+        """
+
+        statistics = self.get_statistics()
+
+        dates = [datetime(year, month, 1) for year, month in statistics.keys()]
+
+        # Extract values for each metric
+        n_submissions = np.array([entry['n_submissions'] for entry in statistics.values()])
+        size_bytes = np.array([entry['size_bytes'] for entry in statistics.values()])
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(dates, n_submissions, '.', label='n_submissions')
+        plt.gcf().autofmt_xdate()
+        plt.xlabel('Date (Year-Month)')
+        plt.ylabel('Number of Submissions')
+        plt.title('Number of Submissions per Month')
+        plt.grid(True)
+        plt.show()
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(dates, 1.0e-9 * size_bytes, '.', color='orange', label='size_bytes')
+        plt.gcf().autofmt_xdate()
+        plt.xlabel('Date (Year-Month)')
+        plt.ylabel('Size (GB)')
+        plt.title('Size in GB per Month')
+        plt.grid(True)
+        plt.show()
+
+        plt.figure(figsize=(10, 5))
+        plt.plot(dates, 1.0e-6 * (size_bytes / n_submissions), '.', color='green', label='size_bytes')
+        plt.gcf().autofmt_xdate()
+        plt.xlabel('Date (Year-Month)')
+        plt.ylabel('Average Submission Size (MB)')
+        plt.title('Averaged Monthly Submission Size in MB')
+        plt.grid(True)
+        plt.show()

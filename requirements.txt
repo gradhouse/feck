@@ -1,4 +1,5 @@
 coverage
+matplotlib
 nbclassic
 numpy
 pytest

@@ -5,6 +5,7 @@
 # Licensed under the MIT License. See the LICENSE file for more details.
 
 import copy
+import matplotlib.pyplot as plt
 import os
 import pytest
 import tempfile
@@ -484,3 +485,202 @@ def test_import_arxiv_xml_inconsistent_entry():
         manifest.import_arxiv_xml(temp_file_path)
 
     os.remove(temp_file_path)
+
+@pytest.fixture
+def manifest_with_data():
+    """
+    Fixture to provide a Manifest instance with preloaded data.
+    """
+    manifest = Manifest()
+    manifest._manifest = {
+        'metadata': {
+            'manifest_filename': '20250411_arXiv_src_manifest.xml',
+            'timestamp_iso': '2025-04-07T08:58:03+00:00'
+        },
+        'contents': [
+            {'filename': 'src/arXiv_src_0001_001.tar',
+             'size_bytes': 225605507,
+             'timestamp_iso': '2010-12-23T05:13:59+00:00',
+             'year': 2000,
+             'month': 1,
+             'sequence_number': 1,
+             'n_submissions': 2364,
+             'hash': {'MD5': '949ae880fbaf4649a485a8d9e07f370b',
+                      'MD5_contents': 'cacbfede21d5dfef26f367ec99384546'}},
+            {'filename': 'src/arXiv_src_0002_001.tar',
+             'size_bytes': 227036528,
+             'timestamp_iso': '2010-12-23T05:18:09+00:00',
+             'year': 2000,
+             'month': 2,
+             'sequence_number': 1,
+             'n_submissions': 2365,
+             'hash': {'MD5': '4592ab506cf775afecf4ad560d982a00',
+                      'MD5_contents': 'd90df481661ccdd7e8be883796539743'}},
+            {'filename': 'src/arXiv_src_0003_001.tar',
+             'size_bytes': 230986882,
+             'timestamp_iso': '2010-12-23T05:22:15+00:00',
+             'year': 2000,
+             'month': 3,
+             'sequence_number': 1,
+             'n_submissions': 2600,
+             'hash': {'MD5': 'b5bf5e52ae8532cdf82b606b42df16ea',
+                      'MD5_contents': '3388afd7bfb2dfd9d3f3e6b353357b33'}},
+            {'filename': 'src/arXiv_src_0004_001.tar',
+             'size_bytes': 191559408,
+             'timestamp_iso': '2010-12-23T05:26:31+00:00',
+             'year': 2000,
+             'month': 4,
+             'sequence_number': 1,
+             'n_submissions': 2076,
+             'hash': {'MD5': '9bf1b55890dceec9535ef723a2aea16b',
+                      'MD5_contents': '46abb309d77065fed44965cc26a4ae2e'}},
+            {'filename': 'src/arXiv_src_0005_001.tar',
+             'size_bytes': 255509072,
+             'timestamp_iso': '2010-12-23T05:30:11+00:00',
+             'year': 2000,
+             'month': 5,
+             'sequence_number': 1,
+             'n_submissions': 2724,
+             'hash': {'MD5': 'b49af416746146eca13c5a6a76bc7193',
+                      'MD5_contents': 'ea665c7b62eaac91110fa344f6ba3fc4'}}
+        ]
+    }
+    return manifest
+
+def test_get_statistics(manifest_with_data):
+    """
+    Test the get_statistics method to ensure it correctly aggregates data.
+    """
+    manifest = manifest_with_data
+    statistics = manifest.get_statistics()
+
+    # Expected statistics
+    expected_statistics = {
+        (2000, 1): {'size_bytes': 225605507, 'n_submissions': 2364},
+        (2000, 2): {'size_bytes': 227036528, 'n_submissions': 2365},
+        (2000, 3): {'size_bytes': 230986882, 'n_submissions': 2600},
+        (2000, 4): {'size_bytes': 191559408, 'n_submissions': 2076},
+        (2000, 5): {'size_bytes': 255509072, 'n_submissions': 2724},
+    }
+
+    assert statistics == expected_statistics
+
+def test_get_statistics_empty_manifest():
+    """
+    Test the get_statistics method with an empty manifest.
+    """
+    manifest = Manifest()
+    manifest._manifest = {'metadata': {}, 'contents': []}
+    statistics = manifest.get_statistics()
+
+    assert statistics == {}
+
+@pytest.fixture
+def manifest_with_duplicate_keys():
+    """
+    Fixture to provide a Manifest instance with duplicate (year, month) keys.
+    """
+    manifest = Manifest()
+    manifest._manifest = {
+        'metadata': {
+            'manifest_filename': '20250411_arXiv_src_manifest.xml',
+            'timestamp_iso': '2025-04-07T08:58:03+00:00'
+        },
+        'contents': [
+            {'filename': 'src/arXiv_src_0001_001.tar',
+             'size_bytes': 225605507,
+             'timestamp_iso': '2010-12-23T05:13:59+00:00',
+             'year': 2025,
+             'month': 1,
+             'sequence_number': 1,
+             'n_submissions': 2364},
+            {'filename': 'src/arXiv_src_0002_001.tar',
+             'size_bytes': 227036528,
+             'timestamp_iso': '2010-12-23T05:18:09+00:00',
+             'year': 2025,
+             'month': 1,
+             'sequence_number': 2,
+             'n_submissions': 1000},
+        ]
+    }
+    return manifest
+
+def test_get_statistics_branch_coverage(manifest_with_duplicate_keys):
+    """
+    Test get_statistics to ensure both branches of the conditional are covered.
+    """
+    manifest = manifest_with_duplicate_keys
+    statistics = manifest.get_statistics()
+
+    # Expected statistics
+    expected_statistics = {
+        (2025, 1): {
+            'size_bytes': 225605507 + 227036528,  # Sum of sizes for the same (year, month)
+            'n_submissions': 2364 + 1000          # Sum of submissions for the same (year, month)
+        }
+    }
+
+    assert statistics == expected_statistics
+
+@pytest.fixture
+def mock_statistics():
+    """
+    Fixture to provide mock statistics data for testing.
+    """
+    return {
+        (2025, 1): {'size_bytes': 225605507, 'n_submissions': 2364},
+        (2025, 2): {'size_bytes': 227036528, 'n_submissions': 2365},
+        (2025, 3): {'size_bytes': 230986882, 'n_submissions': 2600},
+    }
+
+@pytest.fixture(autouse=True)
+def use_agg_backend():
+    """
+    Automatically set the matplotlib backend to 'Agg' for all tests.
+    This prevents plots from being displayed during testing.
+    """
+    plt.switch_backend('Agg')
+
+def test_plot_summary_statistics(monkeypatch, mock_statistics):
+    """
+    Test the plot_summary_statistics method by mocking the output of get_statistics.
+    """
+    # Create a Manifest instance
+    manifest = Manifest()
+
+    # Mock the get_statistics method
+    def mock_get_statistics(self):
+        return mock_statistics
+
+    monkeypatch.setattr(Manifest, "get_statistics", mock_get_statistics)
+
+    # Call the method
+    manifest.plot_summary_statistics()
+
+    # Get all active figures
+    figures = [plt.figure(i) for i in plt.get_fignums()]
+
+    # Ensure three figures were created
+    assert len(figures) == 3
+
+    # Check the titles of the plots
+    expected_titles = [
+        'Number of Submissions per Month',
+        'Size in GB per Month',
+        'Averaged Monthly Submission Size in MB'
+    ]
+    for fig, expected_title in zip(figures, expected_titles):
+        assert fig.axes[0].get_title() == expected_title
+
+    # Check the x-axis labels
+    expected_xlabels = ['Date (Year-Month)', 'Date (Year-Month)', 'Date (Year-Month)']
+    for fig, expected_xlabel in zip(figures, expected_xlabels):
+        assert fig.axes[0].get_xlabel() == expected_xlabel
+
+    # Check the y-axis labels
+    expected_ylabels = ['Number of Submissions', 'Size (GB)', 'Average Submission Size (MB)']
+    for fig, expected_ylabel in zip(figures, expected_ylabels):
+        assert fig.axes[0].get_ylabel() == expected_ylabel
+
+    # Clean up the figures after the test
+    plt.close('all')
