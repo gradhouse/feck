@@ -149,3 +149,48 @@ def test_is_xml_format_with_mocked_invalid_xml(mocker):
     mocker.patch("builtins.open", mocker.mock_open(read_data=mock_data))
     mocker.patch("os.path.isfile", return_value=True)
     assert XmlHandler.is_xml_format("mocked_file.xml") is False
+
+def test_read_xml_to_dict_file_not_found(mocker):
+    """
+    Test that read_xml_to_dict raises FileNotFoundError when the file does not exist.
+    """
+    mocker.patch("os.path.isfile", return_value=False)
+    with pytest.raises(FileNotFoundError, match="file not found"):
+        XmlHandler.read_xml_to_dict("non_existent_file.xml")
+
+
+def test_read_xml_to_dict_not_xml_format(mocker):
+    """
+    Test that read_xml_to_dict raises TypeError when the file is not in XML format.
+    """
+    mocker.patch("os.path.isfile", return_value=True)
+    mocker.patch("feck.file.handler.xml_handler.XmlHandler.is_xml_format", return_value=False)
+    with pytest.raises(TypeError, match="file not in XML format"):
+        XmlHandler.read_xml_to_dict("not_xml_file.xml")
+
+
+def test_read_xml_to_dict_valid_xml(mocker):
+    """
+    Test that read_xml_to_dict correctly parses valid XML content into a dictionary.
+    """
+    mocker.patch("os.path.isfile", return_value=True)
+    mocker.patch("feck.file.handler.xml_handler.XmlHandler.is_xml_format", return_value=True)
+    mocker.patch("builtins.open", mocker.mock_open(read_data="<root><child>Test</child></root>"))
+    mock_xmltodict = mocker.patch("feck.file.handler.xml_handler.xmltodict_implementation.parse", return_value={"root": {"child": "Test"}})
+
+    result = XmlHandler.read_xml_to_dict("valid_file.xml")
+    assert result == {"root": {"child": "Test"}}
+    mock_xmltodict.assert_called_once_with("<root><child>Test</child></root>")
+
+
+def test_read_xml_to_dict_invalid_xml_parsing(mocker):
+    """
+    Test that read_xml_to_dict raises ValueError when XML parsing fails.
+    """
+    mocker.patch("os.path.isfile", return_value=True)
+    mocker.patch("feck.file.handler.xml_handler.XmlHandler.is_xml_format", return_value=True)
+    mocker.patch("builtins.open", mocker.mock_open(read_data="<root><child>Test</child>"))  # Malformed XML
+    mocker.patch("feck.file.handler.xml_handler.xmltodict_implementation.parse", side_effect=Exception("Parsing error"))
+
+    with pytest.raises(ValueError, match="Failed to parse XML content: Parsing error"):
+        XmlHandler.read_xml_to_dict("invalid_file.xml")
